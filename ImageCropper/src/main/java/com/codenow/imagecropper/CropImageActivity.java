@@ -34,6 +34,9 @@ import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.navigation.NavigationBarView;
+
 import java.io.File;
 import java.io.IOException;
 
@@ -53,7 +56,7 @@ public class CropImageActivity extends AppCompatActivity
 
   /** the options that were set for the crop image */
   private CropImageOptions mOptions;
-  private Toolbar toolbar;
+  private BottomNavigationView bottomNavigationView;
 
   @Override
   @SuppressLint("NewApi")
@@ -61,8 +64,10 @@ public class CropImageActivity extends AppCompatActivity
     super.onCreate(savedInstanceState);
     setContentView(R.layout.crop_image_activity);
 
+    showBottom();
+
     mCropImageView = findViewById(R.id.cropImageView);
-    toolbar = findViewById(R.id.toolbar);
+    bottomNavigationView = findViewById(R.id.bottom_navigation);
 
     Bundle bundle = getIntent().getBundleExtra(CropImage.CROP_IMAGE_EXTRA_BUNDLE);
     mCropImageUri = bundle.getParcelable(CropImage.CROP_IMAGE_EXTRA_SOURCE);
@@ -89,30 +94,52 @@ public class CropImageActivity extends AppCompatActivity
       }
     }
 
-    ViewGroup parent = (ViewGroup) toolbar.getParent();
-    if (parent != null) {
-      parent.removeView(toolbar);
-    }
+
     ActionBar actionBar = getSupportActionBar();
     if (actionBar != null) {
       CharSequence title = mOptions != null &&
           mOptions.activityTitle != null && mOptions.activityTitle.length() > 0
               ? mOptions.activityTitle
               : getResources().getString(R.string.crop_image_activity_title);
-  /*    actionBar.setTitle(title);
-      actionBar.setDisplayHomeAsUpEnabled(true);*/
-
-      ActionBar.LayoutParams layoutParams = new ActionBar.LayoutParams(
-              ActionBar.LayoutParams.MATCH_PARENT,
-              ActionBar.LayoutParams.WRAP_CONTENT,
-              Gravity.BOTTOM);
-
-      actionBar.setDisplayOptions(ActionBar.DISPLAY_SHOW_CUSTOM);
+      actionBar.setTitle(title);
       actionBar.setDisplayHomeAsUpEnabled(true);
-      actionBar.setDisplayShowCustomEnabled(true);
-      actionBar.setCustomView(toolbar, layoutParams);
+
 
     }
+  }
+
+  private void showBottom() {
+
+    bottomNavigationView.setOnItemSelectedListener(new NavigationBarView.OnItemSelectedListener() {
+      @Override
+      public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == R.id.crop_image_menu_crop) {
+          cropImage();
+          return true;
+        }
+        if (item.getItemId() == R.id.crop_image_menu_rotate_left) {
+          rotateImage(-mOptions.rotationDegrees);
+          return true;
+        }
+        if (item.getItemId() == R.id.crop_image_menu_rotate_right) {
+          rotateImage(mOptions.rotationDegrees);
+          return true;
+        }
+        if (item.getItemId() == R.id.crop_image_menu_flip_horizontally) {
+          mCropImageView.flipImageHorizontally();
+          return true;
+        }
+        if (item.getItemId() == R.id.crop_image_menu_flip_vertically) {
+          mCropImageView.flipImageVertically();
+          return true;
+        }
+        if (item.getItemId() == android.R.id.home) {
+          setResultCancel();
+          return true;
+        }
+        return true;
+      }
+    });
   }
 
   @Override
@@ -129,7 +156,7 @@ public class CropImageActivity extends AppCompatActivity
     mCropImageView.setOnCropImageCompleteListener(null);
   }
 
-  @Override
+ /* @Override
   public boolean onCreateOptionsMenu(Menu menu) {
     getMenuInflater().inflate(R.menu.crop_image_menu, menu);
 
@@ -169,8 +196,8 @@ public class CropImageActivity extends AppCompatActivity
       }
     }
     return true;
-  }
-
+  }*/
+/*
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
     if (item.getItemId() == R.id.crop_image_menu_crop) {
@@ -198,7 +225,7 @@ public class CropImageActivity extends AppCompatActivity
       return true;
     }
     return super.onOptionsItemSelected(item);
-  }
+  }*/
 
   @Override
   public void onBackPressed() {
