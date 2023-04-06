@@ -10,7 +10,7 @@
         android:scaleType="centerInside"
         tools:ignore="contentDescription"/>
 
-    <com.codenow.imagecropper.CropImageView
+    <com.codenow.imagecropper.CropOverlayView
         android:id="@+id/CropOverlayView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
