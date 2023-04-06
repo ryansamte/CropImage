@@ -63,6 +63,8 @@ public class CropImageActivity extends AppCompatActivity
 
     mCropImageView = findViewById(R.id.cropImageView);
     toolbar = findViewById(R.id.toolbar);
+    setSupportActionBar(toolbar);
+    getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
     Bundle bundle = getIntent().getBundleExtra(CropImage.CROP_IMAGE_EXTRA_BUNDLE);
     mCropImageUri = bundle.getParcelable(CropImage.CROP_IMAGE_EXTRA_SOURCE);
@@ -89,30 +91,9 @@ public class CropImageActivity extends AppCompatActivity
       }
     }
 
-    ViewGroup parent = (ViewGroup) toolbar.getParent();
-    if (parent != null) {
-      parent.removeView(toolbar);
-    }
-    ActionBar actionBar = getSupportActionBar();
-    if (actionBar != null) {
-      CharSequence title = mOptions != null &&
-          mOptions.activityTitle != null && mOptions.activityTitle.length() > 0
-              ? mOptions.activityTitle
-              : getResources().getString(R.string.crop_image_activity_title);
-  /*    actionBar.setTitle(title);
-      actionBar.setDisplayHomeAsUpEnabled(true);*/
 
-      ActionBar.LayoutParams layoutParams = new ActionBar.LayoutParams(
-              ActionBar.LayoutParams.MATCH_PARENT,
-              ActionBar.LayoutParams.WRAP_CONTENT,
-              Gravity.BOTTOM);
 
-      actionBar.setDisplayOptions(ActionBar.DISPLAY_SHOW_CUSTOM);
-      actionBar.setDisplayHomeAsUpEnabled(true);
-      actionBar.setDisplayShowCustomEnabled(true);
-      actionBar.setCustomView(toolbar, layoutParams);
 
-    }
   }
 
   @Override
