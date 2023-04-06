@@ -108,6 +108,8 @@ public class CropImageActivity extends AppCompatActivity
               Gravity.BOTTOM);
 
       actionBar.setDisplayOptions(ActionBar.DISPLAY_SHOW_CUSTOM);
+      actionBar.setDisplayHomeAsUpEnabled(true);
+      actionBar.setDisplayShowCustomEnabled(true);
       actionBar.setCustomView(toolbar, layoutParams);
 
     }
