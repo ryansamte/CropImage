@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
@@ -11,10 +11,9 @@
         android:layout_height="match_parent"
         android:id="@+id/cropImageView"/>
 
-    <com.google.android.material.bottomnavigation.BottomNavigationView
+    <androidx.appcompat.widget.Toolbar
         android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:layout_gravity="bottom"
-        app:menu="@menu/crop_image_menu"
-        android:id="@+id/bottom_navigation"/>
-</LinearLayout>
+        android:layout_height="wrap_content"
+        android:id="@+id/toolbar"
+        android:layout_alignParentBottom="true"/>
+</RelativeLayout>
