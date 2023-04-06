@@ -63,8 +63,7 @@ public class CropImageActivity extends AppCompatActivity
 
     mCropImageView = findViewById(R.id.cropImageView);
     toolbar = findViewById(R.id.toolbar);
-    setSupportActionBar(toolbar);
-    getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+
 
     Bundle bundle = getIntent().getBundleExtra(CropImage.CROP_IMAGE_EXTRA_BUNDLE);
     mCropImageUri = bundle.getParcelable(CropImage.CROP_IMAGE_EXTRA_SOURCE);
