@@ -31,6 +31,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.ViewGroup;
 import android.widget.Toast;
 
 import java.io.File;
@@ -88,6 +89,10 @@ public class CropImageActivity extends AppCompatActivity
       }
     }
 
+    ViewGroup parent = (ViewGroup) toolbar.getParent();
+    if (parent != null) {
+      parent.removeView(toolbar);
+    }
     ActionBar actionBar = getSupportActionBar();
     if (actionBar != null) {
       CharSequence title = mOptions != null &&
