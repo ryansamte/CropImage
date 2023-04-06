@@ -94,14 +94,14 @@ public class CropImageActivity extends AppCompatActivity
               : getResources().getString(R.string.crop_image_activity_title);
       actionBar.setTitle(title);
       actionBar.setDisplayHomeAsUpEnabled(true);
-      Toolbar toolbar = (Toolbar) actionBar.getCustomView().getParent();
+     /* Toolbar toolbar = (Toolbar) actionBar.getCustomView().getParent();
       toolbar.setContentInsetsAbsolute(0, 0);
       ActionBar.LayoutParams layoutParams = new ActionBar.LayoutParams(
               ActionBar.LayoutParams.MATCH_PARENT,
               ActionBar.LayoutParams.WRAP_CONTENT,
               Gravity.BOTTOM);
 
-      actionBar.setCustomView(toolbar, layoutParams);
+      actionBar.setCustomView(toolbar, layoutParams);*/
     }
   }
 
