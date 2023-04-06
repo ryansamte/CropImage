@@ -52,6 +52,7 @@ public class CropImageActivity extends AppCompatActivity
 
   /** the options that were set for the crop image */
   private CropImageOptions mOptions;
+  private Toolbar toolbar;
 
   @Override
   @SuppressLint("NewApi")
@@ -60,6 +61,7 @@ public class CropImageActivity extends AppCompatActivity
     setContentView(R.layout.crop_image_activity);
 
     mCropImageView = findViewById(R.id.cropImageView);
+    toolbar = findViewById(R.id.toolbar);
 
     Bundle bundle = getIntent().getBundleExtra(CropImage.CROP_IMAGE_EXTRA_BUNDLE);
     mCropImageUri = bundle.getParcelable(CropImage.CROP_IMAGE_EXTRA_SOURCE);
@@ -92,16 +94,17 @@ public class CropImageActivity extends AppCompatActivity
           mOptions.activityTitle != null && mOptions.activityTitle.length() > 0
               ? mOptions.activityTitle
               : getResources().getString(R.string.crop_image_activity_title);
-      actionBar.setTitle(title);
-      actionBar.setDisplayHomeAsUpEnabled(true);
-     /* Toolbar toolbar = (Toolbar) actionBar.getCustomView().getParent();
-      toolbar.setContentInsetsAbsolute(0, 0);
+  /*    actionBar.setTitle(title);
+      actionBar.setDisplayHomeAsUpEnabled(true);*/
+
       ActionBar.LayoutParams layoutParams = new ActionBar.LayoutParams(
               ActionBar.LayoutParams.MATCH_PARENT,
               ActionBar.LayoutParams.WRAP_CONTENT,
               Gravity.BOTTOM);
 
-      actionBar.setCustomView(toolbar, layoutParams);*/
+      actionBar.setDisplayOptions(ActionBar.DISPLAY_SHOW_CUSTOM);
+      actionBar.setCustomView(toolbar, layoutParams);
+
     }
   }
 
