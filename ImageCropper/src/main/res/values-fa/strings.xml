@@ -1,11 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="crop_image_menu_rotate_left">چرخش در جهت عقربه های ساعت</string>
-    <string name="crop_image_menu_rotate_right">چرخش</string>
-    <string name="crop_image_menu_crop">بریدن (کراپ)</string>
-    <string name="crop_image_menu_flip">آیینه کردن</string>
-    <string name="crop_image_menu_flip_horizontally">آیینه کردن به صورت افقی</string>
-    <string name="crop_image_menu_flip_vertically">آیینه کردن به صورت عمودی</string>
-    <string name="pick_image_intent_chooser_title">منبع را انتخاب کنید</string>
-    <string name="crop_image_activity_no_permissions">لغو، مجوزهای مورد نیاز ارائه نشده</string>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <string name="crop__saving">در حال ذخیره سازی</string>
+    <string name="crop__wait">لطفاً صبر کنید ...</string>
+    <string name="crop__pick_error">تصویری در دسترس نیست</string>
+
+    <string name="crop__done">تأیید</string>
+    <string name="crop__cancel" tools:ignore="ButtonCase">انصراف</string>
+
 </resources>

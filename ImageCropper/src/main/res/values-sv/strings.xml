@@ -1,16 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
-    <string name="crop_image_activity_title"></string>
-    <string name="crop_image_menu_rotate_left">Rotera vänster</string>
-    <string name="crop_image_menu_rotate_right">Rotera höger</string>
-    <string name="crop_image_menu_crop">Beskär</string>
-    <string name="crop_image_menu_flip">Vänd</string>
-    <string name="crop_image_menu_flip_horizontally">Vänd horisontellt</string>
-    <string name="crop_image_menu_flip_vertically">Vänd vertikalt</string>
+    <string name="crop__saving">Sparar bild…</string>
+    <string name="crop__wait">Var god vänta…</string>
+    <string name="crop__pick_error">Inga bildkällor tillgängliga</string>
 
-    <string name="pick_image_intent_chooser_title">Välj bild</string>
-
-    <string name="crop_image_activity_no_permissions">Avbryter, nödvändiga behörigheter beviljas inte</string>
+    <string name="crop__done">KLAR</string>
+    <string name="crop__cancel" tools:ignore="ButtonCase">AVBRYT</string>
 
 </resources>

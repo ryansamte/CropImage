@@ -1,352 +1,441 @@
-// "Therefore those skilled at the unorthodox
-// are infinite as heaven and earth,
-// inexhaustible as the great rivers.
-// When they come to an end,
-// they begin again,
-// like the days and months;
-// they die and are reborn,
-// like the four seasons."
-//
-// - Sun Tsu,
-// "The Art of War"
+/*
+ * Copyright (C) 2007 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package com.codenow.imagecropper;
 
-import android.Manifest;
-import android.annotation.SuppressLint;
-import android.app.Activity;
+import android.annotation.TargetApi;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.PorterDuff;
-import android.graphics.drawable.Drawable;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.net.Uri;
+import android.opengl.GLES10;
+import android.os.Build;
 import android.os.Bundle;
-import androidx.annotation.NonNull;
-import androidx.appcompat.widget.Toolbar;
-import androidx.core.content.ContextCompat;
-import androidx.appcompat.app.ActionBar;
-import androidx.appcompat.app.AppCompatActivity;
-import android.util.Log;
-import android.view.Gravity;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.ViewGroup;
-import android.widget.Toast;
+import android.os.Handler;
+import android.provider.MediaStore;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 
-import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.concurrent.CountDownLatch;
 
-/**
- * Built-in activity for image cropping.<br>
- * Use {@link CropImage#activity(Uri)} to create a builder to start this activity.
+/*
+ * Modified from original in AOSP.
  */
-public class CropImageActivity extends AppCompatActivity
-    implements CropImageView.OnSetImageUriCompleteListener,
-        CropImageView.OnCropImageCompleteListener {
+public class CropImageActivity extends MonitoredActivity {
 
-  /** The crop image view library widget used in the activity */
-  private CropImageView mCropImageView;
+    private static final int SIZE_DEFAULT = 2048;
+    private static final int SIZE_LIMIT = 4096;
 
-  /** Persist URI image to crop URI if specific permissions are required */
-  private Uri mCropImageUri;
+    private final Handler handler = new Handler();
 
-  /** the options that were set for the crop image */
-  private CropImageOptions mOptions;
-  private Toolbar toolbar;
+    private int aspectX;
+    private int aspectY;
 
-  @Override
-  @SuppressLint({"NewApi", "MissingInflatedId"})
-  public void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-    setContentView(R.layout.crop_image_activity);
+    // Output image
+    private int maxX;
+    private int maxY;
+    private int exifRotation;
+    private boolean saveAsPng;
 
-    mCropImageView = findViewById(R.id.cropImageView);
-    toolbar = findViewById(R.id.toolbar);
+    private Uri sourceUri;
+    private Uri saveUri;
 
+    private boolean isSaving;
 
-    Bundle bundle = getIntent().getBundleExtra(CropImage.CROP_IMAGE_EXTRA_BUNDLE);
-    mCropImageUri = bundle.getParcelable(CropImage.CROP_IMAGE_EXTRA_SOURCE);
-    mOptions = bundle.getParcelable(CropImage.CROP_IMAGE_EXTRA_OPTIONS);
+    private int sampleSize;
+    private RotateBitmap rotateBitmap;
+    private CropImageView imageView;
+    private HighlightView cropView;
 
-    if (savedInstanceState == null) {
-      if (mCropImageUri == null || mCropImageUri.equals(Uri.EMPTY)) {
-        if (CropImage.isExplicitCameraPermissionRequired(this)) {
-          // request permissions and handle the result in onRequestPermissionsResult()
-          requestPermissions(
-              new String[] {Manifest.permission.CAMERA},
-              CropImage.CAMERA_CAPTURE_PERMISSIONS_REQUEST_CODE);
-        } else {
-          CropImage.startPickImageActivity(this);
+    @Override
+    public void onCreate(Bundle icicle) {
+        super.onCreate(icicle);
+        setupWindowFlags();
+        setupViews();
+
+        loadInput();
+        if (rotateBitmap == null) {
+            finish();
+            return;
         }
-      } else if (CropImage.isReadExternalStoragePermissionsRequired(this, mCropImageUri)) {
-        // request permissions and handle the result in onRequestPermissionsResult()
-        requestPermissions(
-            new String[] {Manifest.permission.READ_EXTERNAL_STORAGE},
-            CropImage.PICK_IMAGE_PERMISSIONS_REQUEST_CODE);
-      } else {
-        // no permissions required or already grunted, can start crop image activity
-        mCropImageView.setImageUriAsync(mCropImageUri);
-      }
+        startCrop();
     }
 
-
-
-
-  }
-
-  @Override
-  protected void onStart() {
-    super.onStart();
-    mCropImageView.setOnSetImageUriCompleteListener(this);
-    mCropImageView.setOnCropImageCompleteListener(this);
-  }
-
-  @Override
-  protected void onStop() {
-    super.onStop();
-    mCropImageView.setOnSetImageUriCompleteListener(null);
-    mCropImageView.setOnCropImageCompleteListener(null);
-  }
-
-  @Override
-  public boolean onCreateOptionsMenu(Menu menu) {
-    getMenuInflater().inflate(R.menu.crop_image_menu, menu);
-
-    if (!mOptions.allowRotation) {
-      menu.removeItem(R.id.crop_image_menu_rotate_left);
-      menu.removeItem(R.id.crop_image_menu_rotate_right);
-    } else if (mOptions.allowCounterRotation) {
-      menu.findItem(R.id.crop_image_menu_rotate_left).setVisible(true);
-    }
-
-    if (!mOptions.allowFlipping) {
-      menu.removeItem(R.id.crop_image_menu_flip);
-    }
-
-    if (mOptions.cropMenuCropButtonTitle != null) {
-      menu.findItem(R.id.crop_image_menu_crop).setTitle(mOptions.cropMenuCropButtonTitle);
-    }
-
-    Drawable cropIcon = null;
-    try {
-      if (mOptions.cropMenuCropButtonIcon != 0) {
-        cropIcon = ContextCompat.getDrawable(this, mOptions.cropMenuCropButtonIcon);
-        menu.findItem(R.id.crop_image_menu_crop).setIcon(cropIcon);
-      }
-    } catch (Exception e) {
-      Log.w("AIC", "Failed to read menu crop drawable", e);
-    }
-
-    if (mOptions.activityMenuIconColor != 0) {
-      updateMenuItemIconColor(
-          menu, R.id.crop_image_menu_rotate_left, mOptions.activityMenuIconColor);
-      updateMenuItemIconColor(
-          menu, R.id.crop_image_menu_rotate_right, mOptions.activityMenuIconColor);
-      updateMenuItemIconColor(menu, R.id.crop_image_menu_flip, mOptions.activityMenuIconColor);
-      if (cropIcon != null) {
-        updateMenuItemIconColor(menu, R.id.crop_image_menu_crop, mOptions.activityMenuIconColor);
-      }
-    }
-    return true;
-  }
-
-  @Override
-  public boolean onOptionsItemSelected(MenuItem item) {
-    if (item.getItemId() == R.id.crop_image_menu_crop) {
-      cropImage();
-      return true;
-    }
-    if (item.getItemId() == R.id.crop_image_menu_rotate_left) {
-      rotateImage(-mOptions.rotationDegrees);
-      return true;
-    }
-    if (item.getItemId() == R.id.crop_image_menu_rotate_right) {
-      rotateImage(mOptions.rotationDegrees);
-      return true;
-    }
-    if (item.getItemId() == R.id.crop_image_menu_flip_horizontally) {
-      mCropImageView.flipImageHorizontally();
-      return true;
-    }
-    if (item.getItemId() == R.id.crop_image_menu_flip_vertically) {
-      mCropImageView.flipImageVertically();
-      return true;
-    }
-    if (item.getItemId() == android.R.id.home) {
-      setResultCancel();
-      return true;
-    }
-    return super.onOptionsItemSelected(item);
-  }
-
-  @Override
-  public void onBackPressed() {
-    super.onBackPressed();
-    setResultCancel();
-  }
-
-  @Override
-  @SuppressLint("NewApi")
-  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-
-    // handle result of pick image chooser
-    super.onActivityResult(requestCode, resultCode, data);
-    if (requestCode == CropImage.PICK_IMAGE_CHOOSER_REQUEST_CODE) {
-      if (resultCode == Activity.RESULT_CANCELED) {
-        // User cancelled the picker. We don't have anything to crop
-        setResultCancel();
-      }
-
-      if (resultCode == Activity.RESULT_OK) {
-        mCropImageUri = CropImage.getPickImageResultUri(this, data);
-
-        // For API >= 23 we need to check specifically that we have permissions to read external
-        // storage.
-        if (CropImage.isReadExternalStoragePermissionsRequired(this, mCropImageUri)) {
-          // request permissions and handle the result in onRequestPermissionsResult()
-          requestPermissions(
-                  new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
-                  CropImage.PICK_IMAGE_PERMISSIONS_REQUEST_CODE);
-        } else {
-          // no permissions required or already grunted, can start crop image activity
-          mCropImageView.setImageUriAsync(mCropImageUri);
+    @TargetApi(Build.VERSION_CODES.KITKAT)
+    private void setupWindowFlags() {
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         }
-      }
-    }
-  }
-
-  @Override
-  public void onRequestPermissionsResult(
-      int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
-    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-    if (requestCode == CropImage.PICK_IMAGE_PERMISSIONS_REQUEST_CODE) {
-      if (mCropImageUri != null
-              && grantResults.length > 0
-              && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-        // required permissions granted, start crop image activity
-        mCropImageView.setImageUriAsync(mCropImageUri);
-      } else {
-        Toast.makeText(this, R.string.crop_image_activity_no_permissions, Toast.LENGTH_LONG).show();
-        setResultCancel();
-      }
     }
 
-    if (requestCode == CropImage.CAMERA_CAPTURE_PERMISSIONS_REQUEST_CODE) {
-      // Irrespective of whether camera permission was given or not, we show the picker
-      // The picker will not add the camera intent if permission is not available
-      CropImage.startPickImageActivity(this);
+    private void setupViews() {
+        setContentView(R.layout.crop__activity_crop);
+
+        imageView = (CropImageView) findViewById(R.id.crop_image);
+        imageView.context = this;
+        imageView.setRecycler(new ImageViewTouchBase.Recycler() {
+            @Override
+            public void recycle(Bitmap b) {
+                b.recycle();
+                System.gc();
+            }
+        });
+
+        findViewById(R.id.btn_cancel).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                setResult(RESULT_CANCELED);
+                finish();
+            }
+        });
+
+        findViewById(R.id.btn_done).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                onSaveClicked();
+            }
+        });
     }
-  }
 
-  @Override
-  public void onSetImageUriComplete(CropImageView view, Uri uri, Exception error) {
-    if (error == null) {
-      if (mOptions.initialCropWindowRectangle != null) {
-        mCropImageView.setCropRect(mOptions.initialCropWindowRectangle);
-      }
-      if (mOptions.initialRotation > -1) {
-        mCropImageView.setRotatedDegrees(mOptions.initialRotation);
-      }
-    } else {
-      setResult(null, error, 1);
+    private void loadInput() {
+        Intent intent = getIntent();
+        Bundle extras = intent.getExtras();
+
+        if (extras != null) {
+            aspectX = extras.getInt(Crop.Extra.ASPECT_X);
+            aspectY = extras.getInt(Crop.Extra.ASPECT_Y);
+            maxX = extras.getInt(Crop.Extra.MAX_X);
+            maxY = extras.getInt(Crop.Extra.MAX_Y);
+            saveAsPng = extras.getBoolean(Crop.Extra.AS_PNG, false);
+            saveUri = extras.getParcelable(MediaStore.EXTRA_OUTPUT);
+        }
+
+        sourceUri = intent.getData();
+        if (sourceUri != null) {
+            exifRotation = CropUtil.getExifRotation(CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri));
+
+            InputStream is = null;
+            try {
+                sampleSize = calculateBitmapSampleSize(sourceUri);
+                is = getContentResolver().openInputStream(sourceUri);
+                BitmapFactory.Options option = new BitmapFactory.Options();
+                option.inSampleSize = sampleSize;
+                rotateBitmap = new RotateBitmap(BitmapFactory.decodeStream(is, null, option), exifRotation);
+            } catch (IOException e) {
+                Log.e("Error reading image: " + e.getMessage(), e);
+                setResultException(e);
+            } catch (OutOfMemoryError e) {
+                Log.e("OOM reading image: " + e.getMessage(), e);
+                setResultException(e);
+            } finally {
+                CropUtil.closeSilently(is);
+            }
+        }
     }
-  }
 
-  @Override
-  public void onCropImageComplete(CropImageView view, CropImageView.CropResult result) {
-    setResult(result.getUri(), result.getError(), result.getSampleSize());
-  }
-
-  // region: Private methods
-
-  /** Execute crop image and save the result tou output uri. */
-  protected void cropImage() {
-    if (mOptions.noOutputImage) {
-      setResult(null, null, 1);
-    } else {
-      Uri outputUri = getOutputUri();
-      mCropImageView.saveCroppedImageAsync(
-          outputUri,
-          mOptions.outputCompressFormat,
-          mOptions.outputCompressQuality,
-          mOptions.outputRequestWidth,
-          mOptions.outputRequestHeight,
-          mOptions.outputRequestSizeOptions);
-    }
-  }
-
-  /** Rotate the image in the crop image view. */
-  protected void rotateImage(int degrees) {
-    mCropImageView.rotateImage(degrees);
-  }
-
-  /**
-   * Get Android uri to save the cropped image into.<br>
-   * Use the given in options or create a temp file.
-   */
-  protected Uri getOutputUri() {
-    Uri outputUri = mOptions.outputUri;
-    if (outputUri == null || outputUri.equals(Uri.EMPTY)) {
-      try {
-        String ext =
-            mOptions.outputCompressFormat == Bitmap.CompressFormat.JPEG
-                ? ".jpg"
-                : mOptions.outputCompressFormat == Bitmap.CompressFormat.PNG ? ".png" : ".webp";
-        outputUri = Uri.fromFile(File.createTempFile("cropped", ext, getCacheDir()));
-      } catch (IOException e) {
-        throw new RuntimeException("Failed to create temp file for output image", e);
-      }
-    }
-    return outputUri;
-  }
-
-  /** Result with cropped image data or error if failed. */
-  protected void setResult(Uri uri, Exception error, int sampleSize) {
-    int resultCode = error == null ? RESULT_OK : CropImage.CROP_IMAGE_ACTIVITY_RESULT_ERROR_CODE;
-    setResult(resultCode, getResultIntent(uri, error, sampleSize));
-    finish();
-  }
-
-  /** Cancel of cropping activity. */
-  protected void setResultCancel() {
-    setResult(RESULT_CANCELED);
-    finish();
-  }
-
-  /** Get intent instance to be used for the result of this activity. */
-  protected Intent getResultIntent(Uri uri, Exception error, int sampleSize) {
-    CropImage.ActivityResult result =
-        new CropImage.ActivityResult(
-            mCropImageView.getImageUri(),
-            uri,
-            error,
-            mCropImageView.getCropPoints(),
-            mCropImageView.getCropRect(),
-            mCropImageView.getRotatedDegrees(),
-            mCropImageView.getWholeImageRect(),
-            sampleSize);
-    Intent intent = new Intent();
-    intent.putExtras(getIntent());
-    intent.putExtra(CropImage.CROP_IMAGE_EXTRA_RESULT, result);
-    return intent;
-  }
-
-  /** Update the color of a specific menu item to the given color. */
-  private void updateMenuItemIconColor(Menu menu, int itemId, int color) {
-    MenuItem menuItem = menu.findItem(itemId);
-    if (menuItem != null) {
-      Drawable menuItemIcon = menuItem.getIcon();
-      if (menuItemIcon != null) {
+    private int calculateBitmapSampleSize(Uri bitmapUri) throws IOException {
+        InputStream is = null;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
         try {
-          menuItemIcon.mutate();
-          menuItemIcon.setColorFilter(color, PorterDuff.Mode.SRC_ATOP);
-          menuItem.setIcon(menuItemIcon);
-        } catch (Exception e) {
-          Log.w("AIC", "Failed to update menu item color", e);
+            is = getContentResolver().openInputStream(bitmapUri);
+            BitmapFactory.decodeStream(is, null, options); // Just get image size
+        } finally {
+            CropUtil.closeSilently(is);
         }
-      }
+
+        int maxSize = getMaxImageSize();
+        int sampleSize = 1;
+        while (options.outHeight / sampleSize > maxSize || options.outWidth / sampleSize > maxSize) {
+            sampleSize = sampleSize << 1;
+        }
+        return sampleSize;
     }
-  }
-  // endregion
+
+    private int getMaxImageSize() {
+        int textureLimit = getMaxTextureSize();
+        if (textureLimit == 0) {
+            return SIZE_DEFAULT;
+        } else {
+            return Math.min(textureLimit, SIZE_LIMIT);
+        }
+    }
+
+    private int getMaxTextureSize() {
+        // The OpenGL texture size is the maximum size that can be drawn in an ImageView
+        int[] maxSize = new int[1];
+        GLES10.glGetIntegerv(GLES10.GL_MAX_TEXTURE_SIZE, maxSize, 0);
+        return maxSize[0];
+    }
+
+    private void startCrop() {
+        if (isFinishing()) {
+            return;
+        }
+        imageView.setImageRotateBitmapResetBase(rotateBitmap, true);
+        CropUtil.startBackgroundJob(this, null, getResources().getString(R.string.crop__wait),
+                new Runnable() {
+                    public void run() {
+                        final CountDownLatch latch = new CountDownLatch(1);
+                        handler.post(new Runnable() {
+                            public void run() {
+                                if (imageView.getScale() == 1F) {
+                                    imageView.center();
+                                }
+                                latch.countDown();
+                            }
+                        });
+                        try {
+                            latch.await();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                        new Cropper().crop();
+                    }
+                }, handler
+        );
+    }
+
+    private class Cropper {
+
+        private void makeDefault() {
+            if (rotateBitmap == null) {
+                return;
+            }
+
+            HighlightView hv = new HighlightView(imageView);
+            final int width = rotateBitmap.getWidth();
+            final int height = rotateBitmap.getHeight();
+
+            Rect imageRect = new Rect(0, 0, width, height);
+
+            // Make the default size about 4/5 of the width or height
+            int cropWidth = Math.min(width, height) * 4 / 5;
+            @SuppressWarnings("SuspiciousNameCombination")
+            int cropHeight = cropWidth;
+
+            if (aspectX != 0 && aspectY != 0) {
+                if (aspectX > aspectY) {
+                    cropHeight = cropWidth * aspectY / aspectX;
+                } else {
+                    cropWidth = cropHeight * aspectX / aspectY;
+                }
+            }
+
+            int x = (width - cropWidth) / 2;
+            int y = (height - cropHeight) / 2;
+
+            RectF cropRect = new RectF(x, y, x + cropWidth, y + cropHeight);
+            hv.setup(imageView.getUnrotatedMatrix(), imageRect, cropRect, aspectX != 0 && aspectY != 0);
+            imageView.add(hv);
+        }
+
+        public void crop() {
+            handler.post(new Runnable() {
+                public void run() {
+                    makeDefault();
+                    imageView.invalidate();
+                    if (imageView.highlightViews.size() == 1) {
+                        cropView = imageView.highlightViews.get(0);
+                        cropView.setFocus(true);
+                    }
+                }
+            });
+        }
+    }
+
+    private void onSaveClicked() {
+        if (cropView == null || isSaving) {
+            return;
+        }
+        isSaving = true;
+
+        Bitmap croppedImage;
+        Rect r = cropView.getScaledCropRect(sampleSize);
+        int width = r.width();
+        int height = r.height();
+
+        int outWidth = width;
+        int outHeight = height;
+        if (maxX > 0 && maxY > 0 && (width > maxX || height > maxY)) {
+            float ratio = (float) width / (float) height;
+            if ((float) maxX / (float) maxY > ratio) {
+                outHeight = maxY;
+                outWidth = (int) ((float) maxY * ratio + .5f);
+            } else {
+                outWidth = maxX;
+                outHeight = (int) ((float) maxX / ratio + .5f);
+            }
+        }
+
+        try {
+            croppedImage = decodeRegionCrop(r, outWidth, outHeight);
+        } catch (IllegalArgumentException e) {
+            setResultException(e);
+            finish();
+            return;
+        }
+
+        if (croppedImage != null) {
+            imageView.setImageRotateBitmapResetBase(new RotateBitmap(croppedImage, exifRotation), true);
+            imageView.center();
+            imageView.highlightViews.clear();
+        }
+        saveImage(croppedImage);
+    }
+
+    private void saveImage(Bitmap croppedImage) {
+        if (croppedImage != null) {
+            final Bitmap b = croppedImage;
+            CropUtil.startBackgroundJob(this, null, getResources().getString(R.string.crop__saving),
+                    new Runnable() {
+                        public void run() {
+                            saveOutput(b);
+                        }
+                    }, handler
+            );
+        } else {
+            finish();
+        }
+    }
+
+    private Bitmap decodeRegionCrop(Rect rect, int outWidth, int outHeight) {
+        // Release memory now
+        clearImageView();
+
+        InputStream is = null;
+        Bitmap croppedImage = null;
+        try {
+            is = getContentResolver().openInputStream(sourceUri);
+            BitmapRegionDecoder decoder = BitmapRegionDecoder.newInstance(is, false);
+            final int width = decoder.getWidth();
+            final int height = decoder.getHeight();
+
+            if (exifRotation != 0) {
+                // Adjust crop area to account for image rotation
+                Matrix matrix = new Matrix();
+                matrix.setRotate(-exifRotation);
+
+                RectF adjusted = new RectF();
+                matrix.mapRect(adjusted, new RectF(rect));
+
+                // Adjust to account for origin at 0,0
+                adjusted.offset(adjusted.left < 0 ? width : 0, adjusted.top < 0 ? height : 0);
+                rect = new Rect((int) adjusted.left, (int) adjusted.top, (int) adjusted.right, (int) adjusted.bottom);
+            }
+
+            try {
+                croppedImage = decoder.decodeRegion(rect, new BitmapFactory.Options());
+                if (croppedImage != null && (rect.width() > outWidth || rect.height() > outHeight)) {
+                    Matrix matrix = new Matrix();
+                    matrix.postScale((float) outWidth / rect.width(), (float) outHeight / rect.height());
+                    croppedImage = Bitmap.createBitmap(croppedImage, 0, 0, croppedImage.getWidth(), croppedImage.getHeight(), matrix, true);
+                }
+            } catch (IllegalArgumentException e) {
+                // Rethrow with some extra information
+                throw new IllegalArgumentException("Rectangle " + rect + " is outside of the image ("
+                        + width + "," + height + "," + exifRotation + ")", e);
+            }
+
+        } catch (IOException e) {
+            Log.e("Error cropping image: " + e.getMessage(), e);
+            setResultException(e);
+        } catch (OutOfMemoryError e) {
+            Log.e("OOM cropping image: " + e.getMessage(), e);
+            setResultException(e);
+        } finally {
+            CropUtil.closeSilently(is);
+        }
+        return croppedImage;
+    }
+
+    private void clearImageView() {
+        imageView.clear();
+        if (rotateBitmap != null) {
+            rotateBitmap.recycle();
+        }
+        System.gc();
+    }
+
+    private void saveOutput(Bitmap croppedImage) {
+        if (saveUri != null) {
+            OutputStream outputStream = null;
+            try {
+                outputStream = getContentResolver().openOutputStream(saveUri);
+                if (outputStream != null) {
+                    croppedImage.compress(saveAsPng ? Bitmap.CompressFormat.PNG : Bitmap.CompressFormat.JPEG,
+                            90,     // note: quality is ignored when using PNG
+                            outputStream);
+                }
+            } catch (IOException e) {
+                setResultException(e);
+                Log.e("Cannot open file: " + saveUri, e);
+            } finally {
+                CropUtil.closeSilently(outputStream);
+            }
+
+            CropUtil.copyExifRotation(
+                    CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri),
+                    CropUtil.getFromMediaUri(this, getContentResolver(), saveUri)
+            );
+
+            setResultUri(saveUri);
+        }
+
+        final Bitmap b = croppedImage;
+        handler.post(new Runnable() {
+            public void run() {
+                imageView.clear();
+                b.recycle();
+            }
+        });
+
+        finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (rotateBitmap != null) {
+            rotateBitmap.recycle();
+        }
+    }
+
+    @Override
+    public boolean onSearchRequested() {
+        return false;
+    }
+
+    public boolean isSaving() {
+        return isSaving;
+    }
+
+    private void setResultUri(Uri uri) {
+        setResult(RESULT_OK, new Intent().putExtra(MediaStore.EXTRA_OUTPUT, uri));
+    }
+
+    private void setResultException(Throwable throwable) {
+        setResult(Crop.RESULT_ERROR, new Intent().putExtra(Crop.Extra.ERROR, throwable));
+    }
+
 }
